@@ -1,0 +1,18 @@
+{
+  "python.formatting.provider": "yapf",
+  "python.autoComplete.extraPaths": [
+    "${env:AMBF_WS}/",
+    "${env:AMBF_WS}/ambf_ros_modules/",
+    "${env:AMBF_WS}/ambf_ros_modules/ambf_comm/",
+    "${env:AMBF_WS}/ambf_ros_modules/ambf_comm/scripts/",
+    "${env:AMBF_WS}/ambf_controller/dvrk_functions/scripts/",
+  ],
+  "python.analysis.extraPaths": [
+    "${env:AMBF_WS}/**",
+    "${env:AMBF_WS}/ambf_ros_modules/**",
+    "${env:AMBF_WS}/ambf_ros_modules/ambf_comm/**",
+    "${env:AMBF_WS}/ambf_ros_modules/ambf_comm/scripts/**",
+    "${env:AMBF_WS}/ambf_controller/dvrk_functions/scripts/**",
+  ],
+  "python.pythonPath": "pyenv_arl_training/bin/python"
+}

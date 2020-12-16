@@ -1,0 +1,18 @@
+[style]
+based_on_style = pep8
+align_closing_bracket_with_visual_indent: true
+continuation_indent_width: 2
+use_tabs: false
+each_dict_entry_on_separate_line: false
+column_limit: 80
+dedent_closing_brackets: true
+blank_line_before_nested_class_or_def: true
+arithmetic_precedence_indication: true
+indent_dictionary_value: true
+indent_width: 2
+split_all_comma_separated_values: true
+split_before_logical_operator: true
+split_complex_comprehension: true
+split_before_named_assigns: false
+split_penalty_import_names=0
+split_penalty_for_added_line_split=30
