@@ -6,6 +6,11 @@
     "${env:AMBF_WS}/ambf_ros_modules/ambf_comm/",
     "${env:AMBF_WS}/ambf_ros_modules/ambf_comm/scripts/",
     "${env:AMBF_WS}/ambf_controller/dvrk_functions/scripts/",
+    "${env:ARL_WS}/**",
+    "${env:ARL_WS}/envs/**",
+    "${env:ARL_WS}/envs/arl/**",
+    "${env:ARL_WS}/envs/dVRK/**",
+    "${env:ARL_WS}/scripts/**",
   ],
   "python.analysis.extraPaths": [
     "${env:AMBF_WS}/**",
@@ -13,6 +18,11 @@
     "${env:AMBF_WS}/ambf_ros_modules/ambf_comm/**",
     "${env:AMBF_WS}/ambf_ros_modules/ambf_comm/scripts/**",
     "${env:AMBF_WS}/ambf_controller/dvrk_functions/scripts/**",
+    "${env:ARL_WS}/**",
+    "${env:ARL_WS}/envs/**",
+    "${env:ARL_WS}/envs/arl/**",
+    "${env:ARL_WS}/envs/dVRK/**",
+    "${env:ARL_WS}/scripts/**",
   ],
   "python.pythonPath": "pyenv_arl_training/bin/python"
 }

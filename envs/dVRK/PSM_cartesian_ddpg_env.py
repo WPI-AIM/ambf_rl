@@ -38,21 +38,50 @@
 #     POSSIBILITY OF SUCH DAMAGE.
 
 #     \author    <http://aimlab.wpi.edu>
-#     \author    <amunawar@wpi.edu>, <vvarier@wpi.edu>, <dkoolrajamani@wpi.edu>
-#     \author    Adnan Munawar, Vignesh Manoj Varier, and Dhruv Kool Rajamani
-#     \version   0.1
+#     \author    <dkoolrajamani@wpi.edu>, <vvarier@wpi.edu>, <amunawar@wpi.edu>
+#     \author    Dhruv Kool Rajamani, Vignesh Manoj Varier, and Adnan Munawar
+#     \version   0.1.0
 # */
 # //============================================================================
 
-from typing import List, Set, Tuple, Dict, Any
-from ambf_client import Client
-from ..arl.arl_env import Action, Goal, Observation, ARLEnv
+import sys, os, copy, time
+
+from typing import Iterable, List, Set, Tuple, Dict, Any, Type
+
+from arl.arl_env import Action, Goal, Observation, ARLEnv
+
 import numpy as np
-import copy
-import time
+from numpy import linalg as LA
+
 import gym
-import sys, os
+from gym import spaces
 from gym.utils import seeding
+
+from psmFK import *
+from transformations import euler_from_matrix
+from dvrk_functions.msg import HomogenousTransform
+import rospy
+from dvrk_functions.srv import *
+
+
+class CartesianAction(Action):
+
+  def __init__(
+    self,
+    n_actions: int,
+    action_space_limit: float,
+    action_lims_low: List[float] = None,
+    action_lims_high: List[float] = None
+  ) -> None:
+    super().__init__(n_actions, action_space_limit, action_lims_low, action_lims_high)
+
+    self.action_space = spaces.Box(
+      low=-action_space_limit,
+      high=action_space_limit,
+      shape=(self.n_actions,
+             ),
+      dtype="float32"
+    )
 
 
 class PSMCartesianDDPGEnv(ARLEnv):
@@ -72,11 +101,11 @@ class PSMCartesianDDPGEnv(ARLEnv):
     position_error_threshold: float,
     goal_error_margin: float,
     joint_limits: Dict[str,
-                       Any or List[str]],
+                       np.ndarray or List[str]],
     workspace_limits: Dict[str,
-                           Any or List[str]],
+                           np.ndarray or List[str]],
     enable_step_throttling: bool,
-    joints_to_control: Any or List[str] = [
+    joints_to_control: List[str] = [
       'baselink-yawlink',
       'yawlink-pitchbacklink',
       'pitchendlink-maininsertionlink',
@@ -85,9 +114,10 @@ class PSMCartesianDDPGEnv(ARLEnv):
       'toolpitchlink-toolgripper1link',
       'toolpitchlink-toolgripper2link'
     ],
+    steps_to_print: int = 10000,
     n_actions: int = 3,
     n_skip_steps: int = 5,
-    env_name="PSM_cartesian_ddpg_env"
+    env_name: str = "PSM_cartesian_ddpg_env"
   ) -> None:
     """Initialize an object to train with DDPG on the PSM robot.
 
@@ -109,13 +139,16 @@ class PSMCartesianDDPGEnv(ARLEnv):
         Flag to enable throttling of the simulator
     joints_to_control : np.array(str) | List(str)
         The list of joint links for the psm.
+    steps_to_print : int
+        Number of steps before model prints information to stdout
     n_actions : int
         Number of possible actions
-    n_skip_steps : Number of steps to skip after an update step
+    n_skip_steps : int
+        Number of steps to skip after an update step
     env_name : str
         Name of the environment to train
     """
-    super(PSMCartesianDDPGEnv, self).__init__(enable_step_throttling, n_skip_steps, env_name)
+    super().__init__(enable_step_throttling, n_skip_steps, env_name)
 
     # Set environment limits
     self._position_error_threshold = position_error_threshold
@@ -125,16 +158,26 @@ class PSMCartesianDDPGEnv(ARLEnv):
     # Store controllable joints
     self._joints_to_control = joints_to_control
 
+    # Steps to print
+    self._steps_to_print = steps_to_print
+
     # Set environment and task parameters
     self._n_actions = n_actions
 
     ## Set task constraints
     # Set action space limits
-    self.action = Action(self._n_actions, action_space_limit)
+    self.action = CartesianAction(self._n_actions, action_space_limit)
+    self.action_space = self.action.action_space
 
     # Set observation space and constraints
     self.obs = Observation(state=np.zeros(20))
-    self._initial_pos = copy.deepcopy(self.obs.cur_observation()[0])
+    self.initial_pos = copy.deepcopy(self.obs.cur_observation()[0])
+    self.observation_space = spaces.Box(
+      -np.inf,
+      np.inf,
+      shape=np.array(self.initial_pos).shape,
+      dtype="float32"
+    )
 
     # Set goal position and constraints
     # TODO: Consider using args/extra args in init() to specify goal.
@@ -150,7 +193,6 @@ class PSMCartesianDDPGEnv(ARLEnv):
     )
 
     return
-
 
 # Properties
 
@@ -168,20 +210,434 @@ class PSMCartesianDDPGEnv(ARLEnv):
     return
 
   @property
-  def joint_limits(self) -> Dict[str, Any or List[float]]:
+  def joint_limits(self) -> Dict[str, np.ndarray or List[float]]:
     """Return the joint limits dictionary
     """
     return self._joint_limits
 
   @joint_limits.setter
-  def joint_limits(self, value: Dict[str, Any or List[float]]):
+  def joint_limits(self, value: Dict[str, np.ndarray or List[float]]):
     """Set the joint limits dictionary
     """
     self._joint_limits = value
     return
 
-  
+  @property
+  def workspace_limits(self) -> Dict[str, np.ndarray or List[float]]:
+    """Returns the workspace limits dictionary
+      """
+    return self._workspace_limits
 
-  # Overriding base gym functions
-  def reset(self):
-    pass
+  @workspace_limits.setter
+  def workspace_limits(self, value: Dict[str, np.ndarray or List[float]]):
+    """Set the workspace limits dictionary
+    """
+    self._workspace_limits = value
+    return
+
+  @property
+  def joints_to_control(self) -> Any or List[str]:
+    """Returns a np.array or List of joint object handles
+    """
+    return self._joints_to_control
+
+  @joints_to_control.setter
+  def joints_to_control(self, value: Any or List[str]):
+    """Set a np.array or List of joint object handles
+    """
+    self._joints_to_control = value
+    return
+
+  @property
+  def steps_to_print(self) -> int:
+    """Returns the number of steps to print
+    """
+    return self._steps_to_print
+
+  @steps_to_print.setter
+  def steps_to_print(self, value: int):
+    """Set the number of steps to print
+    """
+    self._steps_to_print = value
+    return
+
+  @property
+  def n_actions(self) -> int:
+    """Returns the number of actions possible
+    """
+    return self._n_actions
+
+  @n_actions.setter
+  def n_actions(self, value: int):
+    """Set the number of actions possible
+    """
+    self._n_actions = value
+    return
+
+  @property
+  def initial_pos(self) -> Any or np.ndarray or List[float] or Dict:
+    """Returns the initial position (state) of the environment
+    """
+    if type(self._initial_pos) != (type(np.ndarray) or type(Dict)):
+      return np.array(self._initial_pos, dtype=np.float)
+    return self._initial_pos
+
+  @initial_pos.setter
+  def initial_pos(self, value: Any or np.ndarray or List[float] or Dict or float):
+    """Set the initial position (state) of the environment
+    """
+    if type(value) == type(float):
+      # Set default values
+      for joint_idx, jt_name in enumerate(self.joints_to_control):
+        # Prismatic joint is set to different value to ensure at least some part of robot tip
+        # goes past the cannula
+        if joint_idx == 2:
+          self.obj_handle.set_joint_pos(jt_name, self.joint_limits['lower_limit'][2])
+        else:
+          self.obj_handle.set_joint_pos(jt_name, value)
+      time.sleep(0.5)
+    else:
+      self._initial_pos = value
+    return
+
+  @property
+  def action_space(self) -> spaces.Box:
+    """Returns the action_space. Overrides default action_space
+    """
+    print("Action space is of type: {}".format(type(self._action_space).__name__))
+    print("Shape is: {}".format(self._action_space.shape))
+    return self._action_space
+
+  @action_space.setter
+  def action_space(self, value: spaces.Box):
+    """Sets the action_space. Overrides default action_space
+    """
+    self._action_space = value
+    return
+
+# Overriding ARLEnv functions
+
+  def reset(self) -> np.ndarray or List[float] or Dict:
+    """Reset the robot environment
+
+    Type 1 Reset : Uses the previous reached state as the initial state for
+    next iteration
+
+    action = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+    observation, _, _, _ = self.step(action)
+
+    Type 2 Reset : Sets the robot to a predefined initial state for each 
+    iteration.
+    """
+
+    # Set the initial Position of the PSM
+    self.initial_pos = 0.0
+    initial_joint_pos, initial_joint_vel = self.get_joint_states()
+    end_effector_frame = compute_FK(initial_joint_pos)
+    # Updates the observation to the initialized position
+    self._update_observation(end_effector_frame, initial_joint_pos, initial_joint_vel)
+    # Samples a goal
+    self.goal = self._sample_goal(self.obs)
+
+    return self.obs.state
+
+  def step(
+    self,
+    action  #: np.ndarray or List[float]
+  ) -> Tuple[np.ndarray or List[float] or Dict,
+             float,
+             bool,
+             Dict[str,
+                  bool]]:
+    """Performs the update step for the algorithm and dynamics
+    """
+    # Set incoming action to Action member variable
+    self.action.action = action
+
+    # Get the current state
+    cur_state = copy.deepcopy(self.obs.state)
+
+    # Make sure the action is valid
+    self.action.check_if_valid_action()
+
+    # counter for printing position, action, and reward
+    self.count_for_print += 1
+
+    # Compute the End Effector frame from the current joint states
+    cur_joint_pos, cur_joint_vel = self.get_joint_states()
+    cur_end_effector_frame = compute_FK(cur_joint_pos)
+
+    # Get the positional component from end effector Homogenous Transform
+    cur_end_effector_pos = np.asarray(cur_end_effector_frame[0:3, 3]).reshape(-1)
+    # Apply the action and compute the resulting state
+    next_end_effector_pos = self.action.apply(cur_end_effector_pos)
+    # Clip the next state to ensure joint limits aren't broken
+    next_end_effector_pos = self.check_if_valid_state(next_end_effector_pos)
+
+    # Create a frame and maintain previous orientation
+    next_end_effector_frame = cur_end_effector_frame
+    for i in range(3):
+      next_end_effector_frame[i, 3] = next_end_effector_pos[i]
+
+    # Create a Homogenous Transform Message
+    msg = HomogenousTransform()
+    msg.data = np.array(next_end_effector_frame).flatten()
+
+    rospy.wait_for_service('compute_IK')
+    computed_joint_state = None
+    try:
+      compute_IK_service = rospy.ServiceProxy('compute_IK', ComputeIK)
+      compute_IK_response = compute_IK_service.call(ComputeIKRequest(msg))
+      computed_joint_state = list(compute_IK_response.q_des)
+      for i in range(0, 6):
+        computed_joint_state[i] = round(computed_joint_state[i], 4)
+    except rospy.ServiceException as e:
+      print("Service call failed: %s" % e, file=sys.stderr)
+    # Ensure the computed joint positions are within the limit of user set joint positions
+    next_joint_state = self.check_if_valid_joint_state(computed_joint_state)
+    # Ensures that PSM joints reach the desired joint positions
+    self.send_cmd(cmd=next_joint_state)
+
+    # Update state, reward, done, and world values in the code
+    self._update_observation(next_end_effector_frame, next_joint_state, cur_joint_vel)
+    # Update the world handle
+    self.world_handle.update()
+
+    # Print function for viewing the output intermittently
+    if self.count_for_print % self.steps_to_print == 0:
+      print("Count: {} Goal: {}".format(self.count_for_print, self.goal.goal))
+      print("\tState: {}".format(cur_state))
+      print("\tAction: {}".format(self.action.action))
+      print("\tReward: {}".format(self.obs.reward))
+
+    return self.obs.state, self.obs.reward, self.obs.is_done, self.obs.info
+
+  def send_cmd(self, cmd: Any or np.ndarray or List[float]):
+    """Ensure the robot tip reaches the desired goal position before moving on to next iteration
+    """
+
+    count_for_joint_pos = 0
+    while True:
+      # Command joints to reach position
+      for joint_idx, joint_name in enumerate(self.joints_to_control):
+        self.obj_handle.set_joint_pos(joint_name, cmd[joint_idx])
+
+      reached_joint_pos = np.zeros(7)
+      # Check to see if desired joint positions have been reached
+      for joint_idx, joint_name in enumerate(self.joints_to_control):
+        reached_joint_pos[joint_idx] = self.obj_handle.get_joint_pos(joint_name)
+
+      # Compare the error between desired and reached pos and allow acceptable margin
+      error = np.around(np.subtract(cmd, reached_joint_pos), decimals=3)
+      # Since Prismatic joint limits are smaller compared to the limits of other joints
+      error[2] = np.around(np.subtract(cmd[2], reached_joint_pos[2]), decimals=4)
+      # Create error margin vector
+      error_margin = np.array([self.position_error_threshold] * len(self.joints_to_control))
+      error_margin[2] = 0.5 * self.position_error_threshold
+
+      # Check to ensure the error margins have been reached
+      if (np.all(np.abs(error) <= error_margin)) or count_for_joint_pos > 75:
+        break
+
+      # Increment counter for iterations of checks
+      count_for_joint_pos += 1
+
+    return
+
+  def compute_reward(self, reached_goal: Goal, desired_goal: Goal, info: Dict[str, bool]) -> float:
+    """Function to compute reward received by the agent
+    """
+    # Find the distance between goal and achieved goal
+    cur_dist = LA.norm(np.subtract(desired_goal.goal[0:3], reached_goal.goal[0:3]))
+    # Continuous reward
+    reward = round(1 - float(abs(cur_dist) / 0.05) * 0.5, 5)
+    # Sparse reward
+    # if abs(cur_dist) < self.goal_error_margin:
+    #     reward = 1
+    # else:
+    #     reward = -1
+    self.obs.dist = cur_dist
+    return reward
+
+  def _sample_goal(self, observation: Observation) -> Goal:
+    """Function to samples new goal positions and ensures its within the workspace of PSM
+    """
+    rand_val_pos = np.around(
+      np.add(
+        observation.state[0:3],
+        self.np_random.uniform(
+          -self.goal.goal_position_range,
+          self.goal.goal_position_range,
+          size=3
+        )
+      ),
+      decimals=4
+    )
+    rand_val_pos[0] = np.around(np.clip(rand_val_pos[0], -0.04, 0.03), decimals=4)
+    rand_val_pos[1] = np.around(np.clip(rand_val_pos[1], -0.03, 0.04), decimals=4)
+    rand_val_pos[2] = np.around(np.clip(rand_val_pos[2], -0.20, -0.09), decimals=4)
+    # Uncomment below lines if individual limits need to be set for generating desired goal state
+    '''
+        rand_val_pos = self.np_random.uniform(-0.1935, 0.1388, size=3)
+        rand_val_pos[0] = np.around(np.clip(rand_val_pos[0], -0.1388, 0.1319), decimals=4)
+        rand_val_pos[1] = np.around(np.clip(rand_val_pos[1], -0.1319, 0.1388), decimals=4)
+        rand_val_pos[2] = np.around(np.clip(rand_val_pos[2], -0.1935, -0.0477), decimals=4)
+        rand_val_angle[0] = np.clip(rand_val_angle[0], -0.15, 0.15)
+        rand_val_angle[1] = np.clip(rand_val_angle[1], -0.15, 0.15)
+        rand_val_angle[2] = np.clip(rand_val_angle[2], -0.15, 0.15)
+        '''
+    # Provide the range for generating the desired orientation at the terminal state
+    rand_val_angle = self.np_random.uniform(-1.5, 1.5, size=3)
+    goal = Goal(
+      goal=np.concatenate((rand_val_pos,
+                           rand_val_angle),
+                          axis=None),
+      goal_error_margin=self.goal.goal_error_margin,
+      goal_position_range=self.goal.goal_position_range
+    )
+
+    return goal
+
+
+# PSM functions, can be imitated for other robots
+
+  def _update_observation(
+    self,
+    end_effector_frame: Any or np.ndarray,
+    joint_pos: Any or np.ndarray,
+    joint_vel: Any or np.ndarray
+  ):
+    """Update the observation object in this class
+    """
+    # Function ensuring skipped steps based on step throttling
+    skipped_steps = self.skipped_sim_steps
+
+    # Robot tip cartesian position and orientation
+    end_effector_pos = end_effector_frame[0:3, 3]
+    end_effector_euler = np.array(euler_from_matrix(end_effector_frame[0:3,
+                                                                       0:3],
+                                                    axes='szyx')).reshape((3,
+                                                                           1))
+    # State vec is 20x1
+    # [x, y, z, ez, ey, ex, j1, j2, j3, j4, j5, j6, j7, w1, w2, w3, w4, w5, w6, w7]
+
+    obs = np.asarray(
+      np.concatenate((end_effector_pos,
+                      end_effector_euler,
+                      joint_pos.reshape((7,
+                                         1))),
+                     axis=0)
+    )
+    obs = np.concatenate((obs, joint_vel), axis=None)
+    # Update the observation object
+    self.obs.state = obs.copy()
+    # Update the obs info
+    self.obs.info = self._update_info()
+    # Compute the reward
+    reached_goal = copy.deepcopy(self.goal)
+    reached_goal.goal = self.obs.state
+    self.obs.reward = self.compute_reward(reached_goal, self.goal, self.obs.info)
+    self.obs.is_done = self._check_if_done()
+
+    return
+
+  def check_if_valid_state(self, state: np.ndarray or List[float]) -> np.ndarray or List[float]:
+    """Clips the state if it goes beyond the cartesian limits
+    """
+    clipped_state = np.zeros(3)
+    cartesian_pos_lower_limit = self.workspace_limits['lower_limit']
+    cartesian_pos_upper_limit = self.workspace_limits['upper_limit']
+    for axis in range(3):
+      clipped_state[axis] = np.clip(
+        state[axis],
+        cartesian_pos_lower_limit[axis],
+        cartesian_pos_upper_limit[axis]
+      )
+    return clipped_state
+
+  def check_if_valid_joint_state(self,
+                                 state: Any or np.ndarray
+                                 or List[float]) -> Any or np.ndarray or List[float]:
+    """Limits the joint states if it goes beyond the joint limits
+    """
+    # dvrk_limits_low = np.array([-1.605, -0.93556, -0.002444, -3.0456, -3.0414, -3.0481, -3.0498])
+    # dvrk_limits_high = np.array([1.5994, 0.94249, 0.24001, 3.0485, 3.0528, 3.0376, 3.0399])
+    # Note: Joint 5 and 6, joint pos = 0, 0 is closed jaw and 0.5, 0.5 is open
+    limit_joint_values = np.zeros(7)
+    joint_lower_limit = self.joint_limits['lower_limit']
+    joint_upper_limit = self.joint_limits['upper_limit']
+    for joint_idx in range(len(state)):
+      limit_joint_values[joint_idx] = np.clip(
+        state[joint_idx],
+        joint_lower_limit[joint_idx],
+        joint_upper_limit[joint_idx]
+      )
+
+    return limit_joint_values
+
+  def get_joint_states(self) -> Tuple[List[float], List[float]]:
+    """Computes the joint position and velocities
+    """
+    joint_positions = np.zeros(7)
+    joint_velocities = np.zeros(7)
+
+    for joint_idx, joint_name in enumerate(self.joints_to_control):
+      joint_positions[joint_idx] = self.obj_handle.get_joint_pos(joint_name)
+      joint_velocities[joint_idx] = self.obj_handle.get_joint_vel(joint_name)
+
+    return joint_positions, joint_velocities
+
+if __name__ == "__main__":
+  # Create object of this class
+  root_link = 'psm/baselink'
+
+  # 'joints_to_control':
+  #   np.array(
+  #     [
+  #       'baselink-yawlink',
+  #       'yawlink-pitchbacklink',
+  #       'pitchendlink-maininsertionlink',
+  #       'maininsertionlink-toolrolllink',
+  #       'toolrolllink-toolpitchlink',
+  #       'toolpitchlink-toolgripper1link',
+  #       'toolpitchlink-toolgripper2link'
+  #     ]
+  #   ),
+  env_kwargs = {
+    'action_space_limit': 0.05,
+    'goal_position_range': 0.05,
+    'position_error_threshold': 0.01,
+    'goal_error_margin': 0.0075,
+    'joint_limits':
+      {
+        'lower_limit': np.array([-0.2,
+                                 -0.2,
+                                 0.1,
+                                 -1.5,
+                                 -1.5,
+                                 -1.5,
+                                 -1.5]),
+        'upper_limit': np.array([0.2,
+                                 0.2,
+                                 0.24,
+                                 1.5,
+                                 1.5,
+                                 1.5,
+                                 1.5])
+      },
+    'workspace_limits':
+      {
+        'lower_limit': np.array([-0.04,
+                                 -0.03,
+                                 -0.2]),
+        'upper_limit': np.array([0.03,
+                                 0.04,
+                                 -0.091])
+      },
+    'enable_step_throttling': False,
+  }
+  psmEnv = PSMCartesianDDPGEnv(**env_kwargs)
+  psmEnv.make(root_link)
+  # psmEnv.world_handle = psmEnv.ambf_client.get_world_handle()
+  # psmEnv.world_handle.enable_throttling(False)

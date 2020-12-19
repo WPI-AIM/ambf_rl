@@ -38,13 +38,13 @@
 #     POSSIBILITY OF SUCH DAMAGE.
 
 #     \author    <http://aimlab.wpi.edu>
-#     \author    <amunawar@wpi.edu>, <vvarier@wpi.edu>, <dkoolrajamani@wpi.edu>
-#     \author    Adnan Munawar, Vignesh Manoj Varier, and Dhruv Kool Rajamani
-#     \version   0.1
+#     \author    <dkoolrajamani@wpi.edu>, <vvarier@wpi.edu>, <amunawar@wpi.edu>
+#     \author    Dhruv Kool Rajamani, Vignesh Manoj Varier, and Adnan Munawar
+#     \version   0.1.0
 # */
 # //============================================================================
 
-from typing import List, Set, Tuple, Dict, Any
+from typing import List, Set, Tuple, Dict, Any, Type
 from ambf_client import Client
 import ambf_client
 from gym import spaces
@@ -56,7 +56,7 @@ from gym.utils import seeding
 from ambf_world import World
 from ambf_object import Object
 import sys
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, ABCMeta
 
 # from psmFK import *
 # from transformations import euler_from_matrix
@@ -70,7 +70,7 @@ class Observation:
 
   def __init__(
     self,
-    state: Any,
+    state: Any or np.ndarray or List[float] or Dict,
     dist: int = 0,
     reward: float = 0.0,
     prev_reward: float = 0.0,
@@ -91,7 +91,7 @@ class Observation:
 
     return
 
-  def cur_observation(self) -> Tuple[Any, float, bool, Dict]:
+  def cur_observation(self) -> Tuple[Any or np.ndarray, float, bool, Dict]:
     return self.state, self.reward, self.is_done, self.info
 
 
@@ -123,27 +123,60 @@ class Action:
     else:
       self.action_lims_high = action_lims_high
 
-    self.action_space = spaces.Box(
-      low=-action_space_limit,
-      high=action_space_limit,
-      shape=(self.n_actions,
-             ),
-      dtype="float32"
-    )
+    self.action_space = spaces.Space()
 
     return
 
-  def check_if_valid_action(self, action: List[float]) -> List[float]:
+  def check_if_valid_action(self):
+    """Check if the length of the action matches the defined action in the action space
+    
+    Raises
+    ------
+    TypeError
+        If the length of action does not match the number of actions defined
+    """
 
-    assert len(action) == self.n_actions, TypeError("Incorrect length of actions provided!")
-    self.action = np.clip(action, self.action_lims_low, self.action_lims_high)
+    assert len(self.action) == self.n_actions, TypeError("Incorrect length of actions provided!")
+    # Clips the action value between the upper and lower limits
+    np.clip(self.action, self.action_lims_low, self.action_lims_high, out=self.action)
 
-    return self.action
+    return
+
+  def apply(self, state: np.ndarray, out: np.ndarray = None) -> np.ndarray:
+    """Apply the action to the given state.
+
+    This function can be overrided if the application of the action to state corresponds
+    to a complex relationship to obtain the next state.
+
+    Parameter
+    ---------
+    state : np.ndarray
+        The state (s) to which the action should be added
+    
+    out : np.ndarray, optional
+        The output parameter, passed by reference if the return argument is not used
+
+    Raises
+    ------
+    Exception
+
+    """
+    if out is None:
+      result = np.add(state, self.action)
+    else:
+      result = np.add(state, self.action, out=out)
+
+    return result
 
 
 class Goal:
 
-  def __init__(self, goal_position_range: float, goal_error_margin: float, goal: Any) -> None:
+  def __init__(
+    self,
+    goal_position_range: float,
+    goal_error_margin: float,
+    goal: Any or np.ndarray
+  ) -> None:
 
     self.goal_position_range = goal_position_range
     self.goal_error_margin = goal_error_margin
@@ -151,12 +184,12 @@ class Goal:
 
     return
 
-  def _sample_goal(self) -> Any:
+  def _sample_goal(self) -> Any or np.ndarray:
 
     return self.goal
 
 
-class ARLEnv(gym.Env, ABC):
+class ARLEnv(gym.Env, metaclass=ABCMeta):
   """Base class for the ARLEnv
 
   This class should not be instantiated on its own. It does not contain the 
@@ -169,7 +202,7 @@ class ARLEnv(gym.Env, ABC):
   
   Methods
   -------
-  skip_sim_steps(num)
+  skip_skipped_sim_steps(num)
       Define number of steps to skip if step-throttling is enabled.
   
   set_throttling_enable(check):
@@ -178,21 +211,20 @@ class ARLEnv(gym.Env, ABC):
 
   def __init__(
     self,
-    enable_step_throttling:bool,
-    n_skip_steps:int=5,           # should we pass these parameters as well?
-    env_name:str="arl_env"
+    enable_step_throttling: bool,
+    n_skip_steps: int,
+    env_name: str = "arl_env"
   ) -> None:
-    """
-    TODO: Ask vignesh - static types for parameters to help with documentation.
+    """Initialize the abstract class which handles all AMBF related interactions
     
     Parameters
     ----------
-    name : str
-        The name of the animal
-    sound : str
-        The sound the animal makes
-    num_legs : int, optional
-        The number of legs the animal (default is 4)
+    enable_step_throttling : bool
+        Flag to enable throttling of the simulator
+    n_skip_steps : int
+        Number of steps to skip after an update step
+    env_name : str
+        Name of the environment to train
     """
     super(ARLEnv, self).__init__()
 
@@ -205,27 +237,28 @@ class ARLEnv(gym.Env, ABC):
     self._enable_step_throttling = enable_step_throttling
 
     # Initialize sim steps
+    self._skipped_sim_steps = 0
     self._prev_sim_step = 0
     self._count_for_print = 0
 
     # AMBF Sim Environment Declarations
-    self._obj_handle = Object
-    self._world_handle = World
-    self._ambf_client = Client(client_name=self._client_name)
+    self._obj_handle = None  # Object
+    self._world_handle = None  # World
+    self._ambf_client = None  # Client(client_name=self._client_name)
     # Initialize the ambf client
-    self._ambf_client.connect()
+    self.ambf_client = Client(client_name=self._client_name)
 
     # Set default Observation, Goal, and Action
     self._goal = Goal(0.0, 0.0, None)
     self._obs = Observation(None)
     self._action = Action(0, 0.0)
 
+    # Set action space and observation space
+    self.action_space = self.action.action_space
+    self.observation_space = spaces.Space()
+
     # Sleep to allow the handle to connect to the AMBF server
     time.sleep(1)
-    
-
-    # Populate all objects of the robot within a common namespace
-    self._ambf_client.create_objs_from_rostopics()
 
     # Random seed the environment
     self.seed(5)
@@ -292,6 +325,31 @@ class ARLEnv(gym.Env, ABC):
     return
 
   @property
+  def skipped_sim_steps(self) -> int:
+    """Return the simulation steps skipped
+    """
+    skipped_steps = 0
+    if self.enable_step_throttling:
+      while skipped_steps < self.n_skip_steps:
+        skipped_steps = self.obj_handle.get_sim_step() - self.prev_sim_step
+        time.sleep(1e-5)
+      self.prev_sim_step = self.obj_handle.get_sim_step()
+      if skipped_steps > self.n_skip_steps:
+        print(
+          'WARN: Skipped {} steps, Default skip limit {} Steps'.format(
+            skipped_steps,
+            self.n_skip_steps
+          )
+        )
+    else:
+      skipped_steps = self.obj_handle.get_sim_step() - self.prev_sim_step
+      self.prev_sim_step = self.obj_handle.get_sim_step()
+
+    self._skipped_sim_steps = skipped_steps
+
+    return self._skipped_sim_steps
+
+  @property
   def prev_sim_step(self) -> int:
     """Return the previous simulation step number
     """
@@ -327,7 +385,7 @@ class ARLEnv(gym.Env, ABC):
   def obj_handle(self, value: Object):
     """Set the AMBF Object Handle
     """
-    self._obj_handle = Object
+    self._obj_handle = value
     return
 
   @property
@@ -398,6 +456,33 @@ class ARLEnv(gym.Env, ABC):
     self._action = value
     return
 
+  @property
+  def action_space(self) -> spaces.Space:
+    """Return the action_space
+    """
+    return self._action_space
+
+  @action_space.setter
+  def action_space(self, value: spaces.Space):
+    """Set the action_space
+    """
+    self._action_space = value
+    return
+
+  @property
+  def observation_space(self) -> spaces.Space:
+    """Return the observation_space
+    """
+    return self._observation_space
+
+  @observation_space.setter
+  def observation_space(self, value: spaces.Space):
+    """Set the observation_space
+    """
+    self._observation_space = value
+    return
+
+
 # Gym requirements
 
   def make(self, robot_root_link: str):
@@ -418,12 +503,23 @@ class ARLEnv(gym.Env, ABC):
         raised.
     """
 
+    self.world_handle = self.ambf_client.get_world_handle()
+    if self.world_handle is None:
+      raise ClientHandleError("World handle not found, please make sure AMBF is running")
     self.obj_handle = self.ambf_client.get_obj_handle(robot_root_link)
+    if self.obj_handle is None:
+      raise ClientHandleError("Object handle not found, please make sure robot is loaded in AMBF")
+    time.sleep(2)
     self.world_handle.enable_throttling(self.enable_step_throttling)
     self.world_handle.set_num_step_skips(self.n_skip_steps)
-    time.sleep(2)
-    if self.obj_handle is None or self.world_handle is None:
-      raise ClientHandleError("Client handles not found")
+
+    # Verify obj_handle
+    if self.obj_handle.get_num_joints() == 0:
+      raise ClientHandleError(
+        "Object handle returned {} objects, please make sure robot is loaded in AMBF".format(
+          self.obj_handle.get_num_joints()
+        )
+      )
 
     return
 
@@ -435,18 +531,8 @@ class ARLEnv(gym.Env, ABC):
     return [seed]
 
   @abstractmethod
-  def reset(self) -> Observation:
+  def reset(self) -> np.ndarray or List[float] or Dict:
     """Reset the robot environment
-
-    Type 1 Reset : Uses the previous reached state as the initial state for
-    next iteration
-
-    action = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-
-    observation, _, _, _ = self.step(action)
-
-    Type 2 Reset : Sets the robot to a predefined initial state for each 
-    iteration.
 
     Raises
     ------
@@ -461,13 +547,20 @@ class ARLEnv(gym.Env, ABC):
     return
 
   @abstractmethod
-  def step(self, action: Action) -> Tuple[List[Any] or Any, float, bool, Dict[str, bool]]:
+  def step(
+    self,
+    action  #: Action
+  ) -> Tuple[List[Any] or np.ndarray,
+             float,
+             bool,
+             Dict[str,
+                  bool]]:
     """Performs the update step for the algorithm and dynamics
     """
     return [], 0.0, False, {'': False}
 
   @abstractmethod
-  def compute_reward(self, achieved_goal: Goal, goal: Goal, info: Dict[str, bool]) -> float:
+  def compute_reward(self, reached_goal: Goal, desired_goal: Goal, info: Dict[str, bool]) -> float:
     """Function to compute reward received by the agent
     """
     return 0.0
@@ -503,33 +596,11 @@ class ARLEnv(gym.Env, ABC):
     """
     return self._check_if_done()
 
-
-# PSM and should be moved to inherited class
-
-# def set_initial_pos_func(self):
-
-#   return
-
-# def get_joint_pos_vel_func(self) -> Tuple[str, str]:
-
-#   return 'a', 'b'
-
-# def compute_fk(self, states):
-
-#   return None
-
-# # Use to ensure that goal position is reached before next incoming goal
-# def set_commanded_joint_pos(self):
-#   return
-
-# def limit_cartesian_pos(self):
-#   return
-
-# def limit_joint_pos(self):
-#   return
-
-# def _update_observation(self):
-#   return
+  @abstractmethod
+  def send_cmd(self, cmd: np.ndarray or List[float]):
+    """Send the command to the robot in the AMBF Simulation.
+    """
+    return
 
 if __name__ == '__main__':
 

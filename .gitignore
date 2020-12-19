@@ -211,3 +211,7 @@ dmypy.json
 # Flags for Clang Code Model
 *.cxxflags
 *.cflags
+
+# Ignoring generated logs and tensorboard folders
+.logs
+ddpg_dvrk_tensorboard/
