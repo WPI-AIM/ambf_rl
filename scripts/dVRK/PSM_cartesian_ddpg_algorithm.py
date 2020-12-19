@@ -40,14 +40,12 @@
 #     \author    <http://aimlab.wpi.edu>
 #     \author    <dkoolrajamani@wpi.edu>, <vvarier@wpi.edu>, <amunawar@wpi.edu>
 #     \author    Dhruv Kool Rajamani, Vignesh Manoj Varier, and Adnan Munawar
-#     \version   0.1.0
+#     \version   1.0.0
 # */
 # //============================================================================
 
 # System imports
 import os, sys, time, datetime
-# Temporarily
-sys.path.insert(0, '/home/dhruv/arl/envs/')
 
 # Additional packages
 import numpy as np

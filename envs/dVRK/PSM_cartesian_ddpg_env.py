@@ -40,7 +40,7 @@
 #     \author    <http://aimlab.wpi.edu>
 #     \author    <dkoolrajamani@wpi.edu>, <vvarier@wpi.edu>, <amunawar@wpi.edu>
 #     \author    Dhruv Kool Rajamani, Vignesh Manoj Varier, and Adnan Munawar
-#     \version   0.1.0
+#     \version   1.0.0
 # */
 # //============================================================================
 

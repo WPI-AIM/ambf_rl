@@ -40,7 +40,7 @@
 #     \author    <http://aimlab.wpi.edu>
 #     \author    <dkoolrajamani@wpi.edu>, <vvarier@wpi.edu>, <amunawar@wpi.edu>
 #     \author    Dhruv Kool Rajamani, Vignesh Manoj Varier, and Adnan Munawar
-#     \version   0.1.0
+#     \version   1.0.0
 # */
 # //============================================================================
 
@@ -58,14 +58,7 @@ from ambf_object import Object
 import sys
 from abc import ABC, abstractmethod, ABCMeta
 
-# from psmFK import *
-# from transformations import euler_from_matrix
-# from dvrk_functions.msg import HomogenousTransform
-# import rospy
-# from dvrk_functions.srv import *
 
-
-# TODO: What makes an env suited for ddpg different from an env suited for HER
 class Observation:
 
   def __init__(
