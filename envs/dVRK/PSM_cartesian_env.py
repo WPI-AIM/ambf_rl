@@ -273,8 +273,12 @@ class PSMCartesianEnv(ARLEnv, metaclass=ABCMeta):
   def initial_pos(self) -> Any or np.ndarray or List[float] or Dict:
     """Returns the initial position (state) of the environment
     """
-    if type(self._initial_pos) != (type(np.ndarray) or type(Dict)):
-      return np.array(self._initial_pos, dtype=np.float)
+    # if type(self._initial_pos) == type(np.ndarray):
+    #   return self._initial_pos
+    # elif type(self._initial_pos) == type(dict):
+    #   return self._initial_pos
+    # else:
+    #   return np.array(self._initial_pos)
     return self._initial_pos
 
   @initial_pos.setter

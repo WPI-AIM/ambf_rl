@@ -197,7 +197,7 @@ if __name__ == '__main__':
                                  -0.091])
       },
     'enable_step_throttling': False,
-    'steps_to_print': 10
+    'steps_to_print': 10000
   }
   # Training
   ambf_env = PSMCartesianDDPGEnv(**env_kwargs)
