@@ -215,3 +215,4 @@ dmypy.json
 # Ignoring generated logs and tensorboard folders
 .logs
 ddpg_dvrk_tensorboard/
+training_scripts/

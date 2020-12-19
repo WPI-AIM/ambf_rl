@@ -47,7 +47,6 @@
 import sys, os, copy, time
 
 from typing import Iterable, List, Set, Tuple, Dict, Any, Type
-
 from arl.arl_env import Action, Goal, Observation, ARLEnv
 from .PSM_cartesian_env import PSMCartesianEnv, CartesianAction
 
@@ -65,11 +64,11 @@ import rospy
 from dvrk_functions.srv import *
 
 
-class DDPGObservation(Observation):
+class HERDDPGObservation(Observation):
 
   def __init__(
     self,
-    state: Any or np.ndarray,
+    state: Dict,
     dist: int = 0,
     reward: float = 0.0,
     prev_reward: float = 0.0,
@@ -79,7 +78,7 @@ class DDPGObservation(Observation):
     sim_step_no: int = 0
   ) -> None:
 
-    super(DDPGObservation,
+    super(HERDDPGObservation,
           self).__init__(state,
                          dist,
                          reward,
@@ -91,7 +90,7 @@ class DDPGObservation(Observation):
     return
 
 
-class PSMCartesianDDPGEnv(PSMCartesianEnv):
+class PSMCartesianHERDDPGEnv(PSMCartesianEnv, gym.GoalEnv):
   """Single task based environment for PSM to perform debris removal as shown in
   the paper:
   
@@ -155,7 +154,7 @@ class PSMCartesianDDPGEnv(PSMCartesianEnv):
     env_name : str
         Name of the environment to train
     """
-    super(PSMCartesianDDPGEnv,
+    super(PSMCartesianHERDDPGEnv,
           self).__init__(
             action_space_limit,
             goal_position_range,
@@ -172,108 +171,42 @@ class PSMCartesianDDPGEnv(PSMCartesianEnv):
           )
 
     # Set observation space and constraints
-    self.obs = DDPGObservation(state=np.zeros(20))
+    self.obs = Observation(
+      state={
+        'observation': np.zeros(20),
+        # Prismatic joint is set to 0.1 to ensure at least some part of robot tip goes past the cannula
+        'achieved_goal': np.array([0.0,
+                                   0.0,
+                                   0.1,
+                                   0.0,
+                                   0.0,
+                                   0.0]),
+        'desired_goal': np.zeros(6)
+      }
+    )
     self.initial_pos = copy.deepcopy(self.obs.cur_observation()[0])
-    self.observation_space = spaces.Box(
-      -np.inf,
-      np.inf,
-      shape=np.array(self.initial_pos).shape,
-      dtype="float32"
+    self.observation_space = spaces.Dict(
+      dict(
+        desired_goal=spaces.Box(
+          -np.inf,
+          np.inf,
+          shape=self.initial_pos['achieved_goal'].shape,
+          dtype='float32'
+        ),
+        achieved_goal=spaces.Box(
+          -np.inf,
+          np.inf,
+          shape=self.initial_pos['achieved_goal'].shape,
+          dtype='float32'
+        ),
+        observation=spaces.Box(
+          -np.inf,
+          np.inf,
+          shape=self.initial_pos['observation'].shape,
+          dtype='float32'
+        ),
+      )
     )
-
-    return
-
-  def compute_reward(self, reached_goal: Goal, desired_goal: Goal, info: Dict[str, bool]) -> float:
-    """Function to compute reward received by the agent
-    """
-    # Find the distance between goal and achieved goal
-    cur_dist = LA.norm(np.subtract(desired_goal.goal[0:3], reached_goal.goal[0:3]))
-    # Continuous reward
-    reward = round(1 - float(abs(cur_dist) / 0.05) * 0.5, 5)
-    # Sparse reward
-    # if abs(cur_dist) < self.goal_error_margin:
-    #     reward = 1
-    # else:
-    #     reward = -1
-    self.obs.dist = cur_dist
-    return reward
-
-  def _sample_goal(self, observation: Observation) -> Goal:
-    """Function to samples new goal positions and ensures its within the workspace of PSM
-    """
-    rand_val_pos = np.around(
-      np.add(
-        observation.state[0:3],
-        self.np_random.uniform(
-          -self.goal.goal_position_range,
-          self.goal.goal_position_range,
-          size=3
-        )
-      ),
-      decimals=4
-    )
-    rand_val_pos[0] = np.around(np.clip(rand_val_pos[0], -0.04, 0.03), decimals=4)
-    rand_val_pos[1] = np.around(np.clip(rand_val_pos[1], -0.03, 0.04), decimals=4)
-    rand_val_pos[2] = np.around(np.clip(rand_val_pos[2], -0.20, -0.09), decimals=4)
-    # Uncomment below lines if individual limits need to be set for generating desired goal state
-    '''
-        rand_val_pos = self.np_random.uniform(-0.1935, 0.1388, size=3)
-        rand_val_pos[0] = np.around(np.clip(rand_val_pos[0], -0.1388, 0.1319), decimals=4)
-        rand_val_pos[1] = np.around(np.clip(rand_val_pos[1], -0.1319, 0.1388), decimals=4)
-        rand_val_pos[2] = np.around(np.clip(rand_val_pos[2], -0.1935, -0.0477), decimals=4)
-        rand_val_angle[0] = np.clip(rand_val_angle[0], -0.15, 0.15)
-        rand_val_angle[1] = np.clip(rand_val_angle[1], -0.15, 0.15)
-        rand_val_angle[2] = np.clip(rand_val_angle[2], -0.15, 0.15)
-        '''
-    # Provide the range for generating the desired orientation at the terminal state
-    rand_val_angle = self.np_random.uniform(-1.5, 1.5, size=3)
-    goal = Goal(
-      goal=np.concatenate((rand_val_pos,
-                           rand_val_angle),
-                          axis=None),
-      goal_error_margin=self.goal.goal_error_margin,
-      goal_position_range=self.goal.goal_position_range
-    )
-
-    return goal
-
-  def _update_observation(
-    self,
-    end_effector_frame: Any or np.ndarray,
-    joint_pos: Any or np.ndarray,
-    joint_vel: Any or np.ndarray
-  ):
-    """Update the observation object in this class
-    """
-    # Function ensuring skipped steps based on step throttling
-    skipped_steps = self.skipped_sim_steps
-
-    # Robot tip cartesian position and orientation
-    end_effector_pos = end_effector_frame[0:3, 3]
-    end_effector_euler = np.array(euler_from_matrix(end_effector_frame[0:3,
-                                                                       0:3],
-                                                    axes='szyx')).reshape((3,
-                                                                           1))
-    # State vec is 20x1
-    # [x, y, z, ez, ey, ex, j1, j2, j3, j4, j5, j6, j7, w1, w2, w3, w4, w5, w6, w7]
-
-    obs = np.asarray(
-      np.concatenate((end_effector_pos,
-                      end_effector_euler,
-                      joint_pos.reshape((7,
-                                         1))),
-                     axis=0)
-    )
-    obs = np.concatenate((obs, joint_vel), axis=None)
-    # Update the observation object
-    self.obs.state = obs.copy()
-    # Update the obs info
-    self.obs.info = self._update_info()
-    # Compute the reward
-    reached_goal = copy.deepcopy(self.goal)
-    reached_goal.goal = self.obs.state
-    self.obs.reward = self.compute_reward(reached_goal, self.goal, self.obs.info)
-    self.obs.is_done = self._check_if_done()
 
     return
 
@@ -313,9 +246,8 @@ if __name__ == "__main__":
                                  -0.091])
       },
     'enable_step_throttling': False,
-    'steps_to_print': 10
   }
-  psmEnv = PSMCartesianDDPGEnv(**env_kwargs)
+  psmEnv = PSMCartesianHERDDPGEnv(**env_kwargs)
   psmEnv.make(root_link)
   # psmEnv.world_handle = psmEnv.ambf_client.get_world_handle()
   # psmEnv.world_handle.enable_throttling(False)
