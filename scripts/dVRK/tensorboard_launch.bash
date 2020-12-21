@@ -1,3 +1,3 @@
 # !/bin/bash
 
-tensorboard --logdir $ARL_WS/scripts/dVRK/ddpg_dvrk_tensorboard --port 12346
+tensorboard --logdir $AMBF_RL_WS/scripts/dVRK/ddpg_dvrk_tensorboard --port 12346
