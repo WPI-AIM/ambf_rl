@@ -9,7 +9,7 @@ RUN usermod -aG sudo ${USERNAME}
 
 ENV HOME="/home/${USERNAME}" \
   AMBF_WS="/home/${USERNAME}/ambf" \ 
-  ARL_WS="/home/${USERNAME}/arl"
+  AMBF_RL_WS="/home/${USERNAME}/ambf_rl"
 
 # Add apt-utils
 RUN apt clean && \
@@ -82,9 +82,9 @@ RUN . /opt/ros/melodic/setup.sh && \
   make -j$(nproc)
 
 WORKDIR ${HOME}
-# Make Directory ARL_WS
-RUN git clone https://github.com/DhruvKoolRajamani/arl.git
-WORKDIR ${ARL_WS}
+# Make Directory AMBF_RL_WS
+RUN git clone https://github.com/WPI-AIM/ambf_rl.git
+WORKDIR ${AMBF_RL_WS}
 RUN apt-get update && \
   cat install/training-pip-requirements.txt | xargs -n 1 -L 1 pip3 install -U && \
   apt-get clean && \
@@ -93,7 +93,7 @@ RUN apt-get update && \
 # Stable Baselines fix
 RUN mv /usr/local/lib/python3.6/dist-packages/stable_baselines/ddpg/ddpg.py \
   /usr/local/lib/python3.6/dist-packages/stable_baselines/ddpg/ddpg_old.py && \
-  cp ${ARL_WS}/install/stable_baseline_fix/ddpg.py \
+  cp ${AMBF_RL_WS}/install/stable_baseline_fix/ddpg.py \
   /usr/local/lib/python3.6/dist-packages/stable_baselines/ddpg/
 
 RUN touch ${HOME}/.bashrc && \
@@ -102,10 +102,10 @@ RUN touch ${HOME}/.bashrc && \
 
 RUN . ${HOME}/.bashrc
 
-WORKDIR ${ARL_WS}
+WORKDIR ${AMBF_RL_WS}
 RUN python setup.py install
 
 ENV ROS_HOSTNAME="localhost" \
   ROS_MASTER_URI="http://localhost:11311"
 
-WORKDIR ${ARL_WS}
+WORKDIR ${AMBF_RL_WS}

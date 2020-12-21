@@ -30,12 +30,12 @@ simulation environment.
 If docker is installed, the dockerfile [devel-training-gpu](dockerfiles/devel-training-gpu.Dockerfile) can be run.
 ```bash
 cd ~/
-git clone https://github.com/DhruvKoolRajamani/arl.git && cd arl
+git clone https://github.com/WPI-AIM/ambf_rl.git && cd ambf_rl
 sudo service docker start
-docker build --rm -f "dockerfiles/devel-training-gpu.Dockerfile" -t arl:devel-training-gpu "."
-docker run --rm -it arl:devel-training-gpu
+docker build --rm -f "dockerfiles/devel-training-gpu.Dockerfile" -t ambf_rl:devel-training-gpu "."
+docker run --rm -it ambf_rl:devel-training-gpu
 # Now inside the interactive container
-cd ~/arl
+cd ~/ambf_rl
 python scripts/dVRK/main.py
 ```
 
@@ -65,46 +65,46 @@ Now clone this repository and install training requirements
 ```bash
 source ~/ambf/build/devel/setup.bash
 cd ~/
-git clone https://github.com/DhruvKoolRajamani/arl.git
+git clone https://github.com/WPI-AIM/ambf_rl.git
 ```
 
 **Optional:** If venv is already installed, create and source the virtual environment.
 ```bash
-cd ~/arl
+cd ~/ambf_rl
 virtualenv --python=/usr/bin/python3 pyenv_arl_training
-source ~/arl/pyenv_arl_training/bin/activate
+source ~/ambf_rl/pyenv_arl_training/bin/activate
 ```
 
 Continue with the installation of training specific requirements.
 ```bash
-cd ~/arl
+cd ~/ambf_rl
 cat install/training-pip-requirements.txt | xargs -n 1 -L 1 pip3 install -U
 ```
 
 Copy the ddpg fix to the installed stable-baselines folder.  
 If the virtual environment was installed,  
-`<path to python site-packages>=~/arl/pyenv_arl_training/lib/python3.6/site-packages/>` ortherwise  
+`<path to python site-packages>=~/ambf_rl/pyenv_arl_training/lib/python3.6/site-packages/>` ortherwise  
 `<path to python site-packages>=~/.local/lib/python3.6/site-packages/>`
 ```bash
 mv <path to python site-packages>/stable_baselines/ddpg/ddpg.py \
   <path to python site-packages>/stable_baselines/ddpg/ddpg_old.py && \
-  cp ${ARL_WS}/install/stable_baseline_fix/ddpg.py \
+  cp ${AMBF_RL_WS}/install/stable_baseline_fix/ddpg.py \
   <path to python site-packages>/stable_baselines/ddpg/
 ```
 
 Finally install AMBF-RL
 ```bash
-cd ~/arl
+cd ~/ambf_rl
 python setup.py install
 ```
 
 Test the installation by running the example DDPG or HER+DDPG algorithms to train the dVRK PSM to reach a point.
 ```bash
-cd ~/arl
+cd ~/ambf_rl
 source /opt/ros/melodic/setup.bash
 source ~/ambf/build/devel/setup.bash
 # If a virtual environment was created
-source ~/arl/pyenv_arl_training/bin/activate
+source ~/ambf_rl/pyenv_arl_training/bin/activate
 python scripts/dVRK/main.py
 ```
 An instance of AMBF will spawn and training should begin.
@@ -115,11 +115,11 @@ If using .vscode as an IDE, it would be helpful to export the path to the AMBF-R
 ```bash
 # Individual terminal session
 export AMBF_WS=~/ambf
-export ARL_WS=~/arl
+export AMBF_RL_WS=~/ambf_rl
 
 # .bashrc
 echo "export AMBF_WS=~/ambf" >> ~/.bashrc
-echo "export ARL_WS=~/arl" >> ~/.bashrc
+echo "export AMBF_RL_WS=~/ambf_rl" >> ~/.bashrc
 source ~/.bashrc
 ```
 
@@ -230,4 +230,18 @@ class PSMCartesianEnv(ARLEnv, metaclass=ABCMeta):
     env_name : str
         Name of the environment to train
     """
+```
+
+## Citation
+
+If this work is helpful for your research, please use the following reference for citation:  
+```latex
+@misc{varier_ambf_rl_2020,
+    author = {Varier, Vignesh Manoj and Kool Rajamani, Dhruv and Tavakkolmoghaddam, Farid and Munawar, Adnan and Fischer, Gregory S},
+    title = {AMBF-RL: A real-time simulation based Reinforcement Learning toolkit for Medical Robotics}
+    year = {2020},
+    publisher = {GitHub},
+    journal = {GitHub repository},
+    howpublished = {\url{https://github.com/WPI-AIM/ambf_rl}},
+}
 ```
