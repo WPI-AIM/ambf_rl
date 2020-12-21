@@ -92,6 +92,14 @@ mv <path to python site-packages>/stable_baselines/ddpg/ddpg.py \
   <path to python site-packages>/stable_baselines/ddpg/
 ```
 
+Example: if venv exists
+```bash
+mv ~/ambf_rl/pyenv_arl_training/lib/python3.6/site-packages/stable_baselines/ddpg/ddpg.py \
+  ~/ambf_rl/pyenv_arl_training/lib/python3.6/site-packages/stable_baselines/ddpg/ddpg_old.py && \
+  cp ${AMBF_RL_WS}/install/stable_baseline_fix/ddpg.py \
+  ~/ambf_rl/pyenv_arl_training/lib/python3.6/site-packages/stable_baselines/ddpg/
+```
+
 Finally install AMBF-RL
 ```bash
 cd ~/ambf_rl
