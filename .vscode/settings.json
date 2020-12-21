@@ -1,4 +1,26 @@
 {
+  "editor.rulers": [
+    80
+  ],
+  "githubIssues.createIssueTriggers": [
+    "feature",
+    "bug",
+    "documentation",
+    "question"
+  ],
+  "githubIssues.issueCompletions.enabled": true,
+  "githubIssues.useBranchForIssues": "prompt",
+  "githubIssues.issueBranchTitle": "$feature/${issueNumber}-${sanitizedIssueTitle}",
+  "githubIssues.queries": [
+    {
+      "label": "My Open Issues",
+      "query": "assignee:${user} state:open"
+    },
+    {
+      "label": "Issues",
+      "query": "repo:${owner}/${repository} state:open" //  sort:created-desc
+    }
+  ],
   "python.formatting.provider": "yapf",
   "python.autoComplete.extraPaths": [
     "${env:AMBF_WS}/",
