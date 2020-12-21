@@ -113,7 +113,8 @@ source /opt/ros/melodic/setup.bash
 source ~/ambf/build/devel/setup.bash
 # If a virtual environment was created
 source ~/ambf_rl/pyenv_arl_training/bin/activate
-python scripts/dVRK/main.py
+cd scripts/dVRK/
+python main.py
 ```
 An instance of AMBF will spawn and training should begin.
 
