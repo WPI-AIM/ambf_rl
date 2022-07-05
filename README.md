@@ -245,12 +245,5 @@ class PSMCartesianEnv(ARLEnv, metaclass=ABCMeta):
 
 If this work is helpful for your research, please use the following reference for citation:  
 ```latex
-@misc{varier_ambf_rl_2020,
-    author = {Varier, Vignesh Manoj and Kool Rajamani, Dhruv and Tavakkolmoghaddam, Farid and Munawar, Adnan and Fischer, Gregory S},
-    title = {AMBF-RL: A real-time simulation based Reinforcement Learning toolkit for Medical Robotics}
-    year = {2020},
-    publisher = {GitHub},
-    journal = {GitHub repository},
-    howpublished = {\url{https://github.com/WPI-AIM/ambf_rl}},
-}
+@INPROCEEDINGS{9807609,  author={Varier, Vignesh Manoj and Rajamani, Dhruv Kool and Tavakkolmoghaddam, Farid and Munawar, Adnan and Fischer, Gregory S},  booktitle={2022 International Symposium on Medical Robotics (ISMR)},   title={AMBF-RL: A real-time simulation based Reinforcement Learning toolkit for Medical Robotics},   year={2022},  volume={},  number={},  pages={1-8},  doi={10.1109/ISMR48347.2022.9807609}}
 ```
