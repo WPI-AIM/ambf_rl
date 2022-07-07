@@ -33,7 +33,7 @@ cd ~/
 git clone https://github.com/WPI-AIM/ambf_rl.git && cd ambf_rl
 sudo service docker start
 docker build --rm -f "dockerfiles/devel-training-gpu.Dockerfile" -t ambf_rl:devel-training-gpu "."
-docker run --rm -it ambf_rl:devel-training-gpu
+docker run --ipc host --gpus all -it --rm --network host ambf_rl:devel-training-gpu
 # Now inside the interactive container
 cd ~/ambf_rl
 python scripts/dVRK/main.py
