@@ -83,7 +83,6 @@ RUN . /opt/ros/melodic/setup.sh && \
   cmake ../ -DCMAKE_BUILD_TYPE=Debug && \
   make -j$(nproc)
 
-# ADD . ${HOME}/ambf_rl
 WORKDIR ${HOME}
 # Make Directory AMBF_RL_WS
 RUN git clone https://github.com/WPI-AIM/ambf_rl.git -b fix/docker-training-env
@@ -94,7 +93,7 @@ RUN apt-get update && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/*
 
-# Stable Baselines fix
+# Stable baselines ddpg fix
 RUN mv /usr/local/lib/python3.6/dist-packages/stable_baselines/ddpg/ddpg.py \
   /usr/local/lib/python3.6/dist-packages/stable_baselines/ddpg/ddpg_old.py && \
   cp ${AMBF_RL_WS}/install/stable_baseline_fix/ddpg.py \
@@ -113,3 +112,4 @@ ENV ROS_HOSTNAME="localhost" \
   ROS_MASTER_URI="http://localhost:11311"
 
 WORKDIR ${AMBF_RL_WS}
+
