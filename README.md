@@ -35,8 +35,8 @@ sudo service docker start
 docker build --rm -f "dockerfiles/devel-training-gpu.Dockerfile" -t ambf_rl:devel-training-gpu "."
 docker run --ipc host --gpus all -it --rm --network host ambf_rl:devel-training-gpu
 # Now inside the interactive container
-cd ~/ambf_rl
-python scripts/dVRK/main.py
+cd ~/ambf_rl/scripts/dVRK/
+./main.py
 ```
 
 ### 2. Install dependencies

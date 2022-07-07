@@ -10,18 +10,15 @@ processes = (
   'training',
   'tensorboard_launch',
   # 'bagging',
-  'print_output'
+  # 'print_output'
 )
 
 
 def run_process(script_name):
   print('Running process: {}'.format(script_name))
-  if script_name == 'print_output':
-    os.system('./{}.bash'.format(script_name))
-  elif script_name == 'training':
+  if script_name == 'training':
     os.system(
-      './{}.bash 1> .logs/{}_out.txt  2> .logs/{}_err.txt'.format(
-        script_name,
+      './{}.bash | tee .logs/{}.txt'.format(
         script_name,
         script_name
       )
