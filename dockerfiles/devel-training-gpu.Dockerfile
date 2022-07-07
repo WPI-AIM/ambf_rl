@@ -11,10 +11,12 @@ ENV HOME="/home/${USERNAME}" \
   AMBF_WS="/home/${USERNAME}/ambf" \ 
   AMBF_RL_WS="/home/${USERNAME}/ambf_rl"
 
+# CUDA Repo Fix
+RUN apt-key del A4B469963BF863CC && \
+    apt-key adv --fetch-keys http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/3bf863cc.pub
+
 # Add apt-utils
-RUN apt clean && \
-  rm -rf /var/lib/apt/lists/* && \
-  apt-get update && \
+RUN apt-get update && \
   apt-get install apt-utils -q -y \
   && rm -rf /var/lib/apt/lists/*
 
@@ -81,9 +83,11 @@ RUN . /opt/ros/melodic/setup.sh && \
   cmake ../ -DCMAKE_BUILD_TYPE=Debug && \
   make -j$(nproc)
 
+# ADD . ${HOME}/ambf_rl
 WORKDIR ${HOME}
 # Make Directory AMBF_RL_WS
-RUN git clone https://github.com/WPI-AIM/ambf_rl.git
+RUN git clone https://github.com/WPI-AIM/ambf_rl.git -b fix/docker-training-env
+
 WORKDIR ${AMBF_RL_WS}
 RUN apt-get update && \
   cat install/training-pip-requirements.txt | xargs -n 1 -L 1 pip3 install -U && \
