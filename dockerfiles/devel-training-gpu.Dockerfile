@@ -80,7 +80,7 @@ RUN apt-get update && \
 RUN . /opt/ros/melodic/setup.sh && \
   mkdir -p ${AMBF_WS}/build && \
   cd ${AMBF_WS}/build && \
-  cmake ../ -DCMAKE_BUILD_TYPE=Debug && \
+  cmake ../ && \
   make -j$(nproc)
 
 WORKDIR ${HOME}
